@@ -4,8 +4,9 @@ import uuid
 import datetime
 
 import tempfile
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -109,6 +110,16 @@ class QueryRequest(BaseModel):
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 inngest.fast_api.serve(app, inngest_client, [rag_ingest_pdf, rag_query_pdf_ai])
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    return JSONResponse(status_code=500, content={
+        "error": type(exc).__name__,
+        "detail": str(exc),
+        "trace": traceback.format_exc()[-2000:],
+    })
 
 
 @app.get("/health")
