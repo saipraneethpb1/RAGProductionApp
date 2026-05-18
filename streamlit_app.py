@@ -17,11 +17,10 @@ def _backend_url() -> str:
 def _wake_backend():
     """Ping the backend until it responds — handles Render free-tier cold starts."""
     url = f"{_backend_url()}/health"
-    for attempt in range(24):        # up to ~2 minutes
+    for _ in range(36):              # up to ~3 minutes
         try:
-            r = requests.get(url, timeout=10)
-            if r.status_code == 200:
-                return
+            requests.get(url, timeout=10)
+            return                   # any response means server is up
         except requests.exceptions.RequestException:
             pass
         time.sleep(5)
