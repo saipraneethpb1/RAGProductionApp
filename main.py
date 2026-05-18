@@ -111,6 +111,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 inngest.fast_api.serve(app, inngest_client, [rag_ingest_pdf, rag_query_pdf_ai])
 
 
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
 @app.post("/ingest")
 async def ingest(file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:

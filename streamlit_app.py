@@ -1,6 +1,5 @@
 import os
 import time
-from pathlib import Path
 
 import requests
 import streamlit as st
@@ -15,11 +14,25 @@ def _backend_url() -> str:
     return os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 
+def _wake_backend():
+    """Ping the backend until it responds — handles Render free-tier cold starts."""
+    url = f"{_backend_url()}/health"
+    for attempt in range(24):        # up to ~2 minutes
+        try:
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                return
+        except requests.exceptions.RequestException:
+            pass
+        time.sleep(5)
+    raise TimeoutError("Backend did not wake up in time. Try again in a moment.")
+
+
 def ingest_pdf(file_bytes: bytes, filename: str) -> dict:
     resp = requests.post(
         f"{_backend_url()}/ingest",
         files={"file": (filename, file_bytes, "application/pdf")},
-        timeout=120,
+        timeout=180,
     )
     resp.raise_for_status()
     return resp.json()
@@ -39,6 +52,8 @@ st.title("Upload a PDF to Ingest")
 uploaded = st.file_uploader("Choose a PDF", type=["pdf"], accept_multiple_files=False)
 
 if uploaded is not None:
+    with st.spinner("Waking up backend (may take ~30s on first request)..."):
+        _wake_backend()
     with st.spinner("Ingesting PDF — chunking, embedding, storing..."):
         result = ingest_pdf(uploaded.getvalue(), uploaded.name)
     st.success(f"Ingested {result['ingested']} chunks from: {result['source']}")
@@ -54,6 +69,7 @@ with st.form("rag_query_form"):
 
     if submitted and question.strip():
         with st.spinner("Searching and generating answer..."):
+            _wake_backend()
             output = query_rag(question.strip(), int(top_k))
             answer = output.get("answer", "")
             sources = output.get("sources", [])
