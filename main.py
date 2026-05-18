@@ -3,7 +3,8 @@ import os
 import uuid
 import datetime
 
-from fastapi import FastAPI
+import tempfile
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
@@ -108,6 +109,23 @@ class QueryRequest(BaseModel):
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 inngest.fast_api.serve(app, inngest_client, [rag_ingest_pdf, rag_query_pdf_ai])
+
+
+@app.post("/ingest")
+async def ingest(file: UploadFile = File(...)):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        tmp.write(await file.read())
+        tmp_path = tmp.name
+    try:
+        source_id = file.filename or tmp_path
+        chunks = load_and_chunk_pdf(tmp_path)
+        vecs = embed_texts(chunks)
+        ids = [str(uuid.uuid5(uuid.NAMESPACE_URL, f"{source_id}:{i}")) for i in range(len(chunks))]
+        payloads = [{"source": source_id, "text": chunks[i]} for i in range(len(chunks))]
+        get_storage().upsert(ids, vecs, payloads)
+        return {"ingested": len(chunks), "source": source_id}
+    finally:
+        os.unlink(tmp_path)
 
 
 @app.post("/query")
