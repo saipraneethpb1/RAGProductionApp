@@ -3,10 +3,13 @@ import os
 import time
 from pathlib import Path
 
+import nest_asyncio
 import requests
 import streamlit as st
 import inngest
 from dotenv import load_dotenv
+
+nest_asyncio.apply()
 
 load_dotenv()
 
