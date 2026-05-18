@@ -4,6 +4,8 @@ import uuid
 import datetime
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
 import inngest
@@ -98,5 +100,37 @@ async def rag_query_pdf_ai(ctx: inngest.Context):
     return {"answer": answer, "sources": found.sources, "num_contexts": len(found.contexts)}
 
 
+class QueryRequest(BaseModel):
+    question: str
+    top_k: int = 5
+
+
 app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 inngest.fast_api.serve(app, inngest_client, [rag_ingest_pdf, rag_query_pdf_ai])
+
+
+@app.post("/query")
+async def query(req: QueryRequest):
+    query_vec = embed_texts([req.question])[0]
+    found = get_storage().search(query_vec, top_k=req.top_k)
+    context_block = "\n\n".join(f"- {c}" for c in found["contexts"])
+    res = _groq.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        max_tokens=1024,
+        temperature=0.2,
+        messages=[
+            {"role": "system", "content": "You answer questions using only the provided context."},
+            {"role": "user", "content": (
+                "Use the following context to answer the question.\n\n"
+                f"Context:\n{context_block}\n\n"
+                f"Question: {req.question}\n"
+                "Answer concisely using the context above."
+            )},
+        ],
+    )
+    return {
+        "answer": res.choices[0].message.content.strip(),
+        "sources": found["sources"],
+        "num_contexts": len(found["contexts"]),
+    }
