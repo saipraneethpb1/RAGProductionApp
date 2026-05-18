@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables — never commit secrets
+.env
+
+# Uploaded PDFs
+uploads/
+
+# Local Qdrant data
+qdrant_storage/
+
+# FastEmbed model cache
+fastembed_cache/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# uv lock
+uv.lock
