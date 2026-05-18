@@ -15,16 +15,17 @@ def _backend_url() -> str:
 
 
 def _wake_backend():
-    """Ping the backend until it responds — handles Render free-tier cold starts."""
+    """Wait for the backend to respond with 200 — handles Render free-tier cold starts (~60s)."""
     url = f"{_backend_url()}/health"
-    for _ in range(36):              # up to ~3 minutes
+    for _ in range(48):              # up to 4 minutes
         try:
-            requests.get(url, timeout=10)
-            return                   # any response means server is up
+            r = requests.get(url, timeout=15)
+            if r.status_code == 200:
+                return
         except requests.exceptions.RequestException:
             pass
         time.sleep(5)
-    raise TimeoutError("Backend did not wake up in time. Try again in a moment.")
+    raise TimeoutError("Backend is taking too long to wake up. Please try again in a minute.")
 
 
 def ingest_pdf(file_bytes: bytes, filename: str) -> dict:
@@ -51,7 +52,8 @@ st.title("Upload a PDF to Ingest")
 uploaded = st.file_uploader("Choose a PDF", type=["pdf"], accept_multiple_files=False)
 
 if uploaded is not None:
-    with st.spinner("Waking up backend (may take ~30s on first request)..."):
+    st.info("⏳ First request may take up to 60s while the backend wakes up on Render's free tier.")
+    with st.spinner("Waking up backend..."):
         _wake_backend()
     with st.spinner("Ingesting PDF — chunking, embedding, storing..."):
         result = ingest_pdf(uploaded.getvalue(), uploaded.name)
@@ -67,7 +69,7 @@ with st.form("rag_query_form"):
     submitted = st.form_submit_button("Ask")
 
     if submitted and question.strip():
-        with st.spinner("Searching and generating answer..."):
+        with st.spinner("Waking up backend if needed..."):
             _wake_backend()
             output = query_rag(question.strip(), int(top_k))
             answer = output.get("answer", "")
