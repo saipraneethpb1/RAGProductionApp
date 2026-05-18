@@ -1,19 +1,23 @@
 import asyncio
+import concurrent.futures
 import os
 import time
 from pathlib import Path
 
-import nest_asyncio
 import requests
 import streamlit as st
 import inngest
 from dotenv import load_dotenv
 
-nest_asyncio.apply()
-
 load_dotenv()
 
 st.set_page_config(page_title="RAG Ingest PDF", page_icon="📄", layout="centered")
+
+
+def _run_async(coro):
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(asyncio.run, coro)
+        return future.result()
 
 
 @st.cache_resource
@@ -34,7 +38,7 @@ def save_uploaded_pdf(file) -> Path:
     return file_path
 
 
-async def send_rag_ingest_event(pdf_path: Path) -> None:
+async def _send_ingest(pdf_path: Path) -> None:
     client = get_inngest_client()
     await client.send(
         inngest.Event(
@@ -47,7 +51,7 @@ async def send_rag_ingest_event(pdf_path: Path) -> None:
     )
 
 
-async def send_rag_query_event(question: str, top_k: int) -> str:
+async def _send_query(question: str, top_k: int) -> str:
     client = get_inngest_client()
     result = await client.send(
         inngest.Event(
@@ -98,7 +102,7 @@ uploaded = st.file_uploader("Choose a PDF", type=["pdf"], accept_multiple_files=
 if uploaded is not None:
     with st.spinner("Uploading and triggering ingestion..."):
         path = save_uploaded_pdf(uploaded)
-        asyncio.run(send_rag_ingest_event(path))
+        _run_async(_send_ingest(path))
         time.sleep(0.3)
     st.success(f"Triggered ingestion for: {path.name}")
     st.caption("You can upload another PDF if you like.")
@@ -113,7 +117,7 @@ with st.form("rag_query_form"):
 
     if submitted and question.strip():
         with st.spinner("Sending event and generating answer..."):
-            event_id = asyncio.run(send_rag_query_event(question.strip(), int(top_k)))
+            event_id = _run_async(_send_query(question.strip(), int(top_k)))
             output = wait_for_run_output(event_id)
             answer = output.get("answer", "")
             sources = output.get("sources", [])
