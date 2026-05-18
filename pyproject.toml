@@ -3,7 +3,7 @@ name = "ragproductionapp"
 version = "0.1.0"
 description = "Production RAG app with Inngest workflow orchestration"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<4.0"
 dependencies = [
     "fastembed>=0.4.0",
     "fastapi>=0.135.2",
