@@ -1,12 +1,9 @@
-import asyncio
-import concurrent.futures
 import os
 import time
 from pathlib import Path
 
 import requests
 import streamlit as st
-import inngest
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,20 +11,15 @@ load_dotenv()
 st.set_page_config(page_title="RAG Ingest PDF", page_icon="📄", layout="centered")
 
 
-def _run_async(coro):
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(asyncio.run, coro)
-        return future.result()
-
-
-@st.cache_resource
-def get_inngest_client() -> inngest.Inngest:
-    is_prod = bool(os.getenv("INNGEST_EVENT_KEY"))
-    return inngest.Inngest(
-        app_id="rag_app",
-        event_key=os.getenv("INNGEST_EVENT_KEY"),
-        is_production=is_prod,
-    )
+def _send_event(event_name: str, data: dict) -> str:
+    event_key = os.getenv("INNGEST_EVENT_KEY", "")
+    if event_key:
+        url = f"https://inn.gs/e/{event_key}"
+    else:
+        url = "http://127.0.0.1:8288/e/test"
+    resp = requests.post(url, json={"name": event_name, "data": data}, timeout=15)
+    resp.raise_for_status()
+    return resp.json()["ids"][0]
 
 
 def save_uploaded_pdf(file) -> Path:
@@ -36,30 +28,6 @@ def save_uploaded_pdf(file) -> Path:
     file_path = uploads_dir / file.name
     file_path.write_bytes(file.getbuffer())
     return file_path
-
-
-async def _send_ingest(pdf_path: Path) -> None:
-    client = get_inngest_client()
-    await client.send(
-        inngest.Event(
-            name="rag/ingest_pdf",
-            data={
-                "pdf_path": str(pdf_path.resolve()),
-                "source_id": pdf_path.name,
-            },
-        )
-    )
-
-
-async def _send_query(question: str, top_k: int) -> str:
-    client = get_inngest_client()
-    result = await client.send(
-        inngest.Event(
-            name="rag/query_pdf_ai",
-            data={"question": question, "top_k": top_k},
-        )
-    )
-    return result[0]
 
 
 def _inngest_api_base() -> str:
@@ -102,7 +70,10 @@ uploaded = st.file_uploader("Choose a PDF", type=["pdf"], accept_multiple_files=
 if uploaded is not None:
     with st.spinner("Uploading and triggering ingestion..."):
         path = save_uploaded_pdf(uploaded)
-        _run_async(_send_ingest(path))
+        _send_event("rag/ingest_pdf", {
+            "pdf_path": str(path.resolve()),
+            "source_id": path.name,
+        })
         time.sleep(0.3)
     st.success(f"Triggered ingestion for: {path.name}")
     st.caption("You can upload another PDF if you like.")
@@ -117,7 +88,10 @@ with st.form("rag_query_form"):
 
     if submitted and question.strip():
         with st.spinner("Sending event and generating answer..."):
-            event_id = _run_async(_send_query(question.strip(), int(top_k)))
+            event_id = _send_event("rag/query_pdf_ai", {
+                "question": question.strip(),
+                "top_k": int(top_k),
+            })
             output = wait_for_run_output(event_id)
             answer = output.get("answer", "")
             sources = output.get("sources", [])
