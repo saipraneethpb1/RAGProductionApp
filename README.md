@@ -18,20 +18,24 @@ A production-grade Retrieval-Augmented Generation (RAG) application built with I
 ## Architecture
 
 ```
-Streamlit UI  →  Inngest Cloud  →  FastAPI Worker  →  Qdrant Cloud
-                                        ↓
-                                   FastEmbed + Groq
+Streamlit UI  →  FastAPI (Render)  →  Qdrant Cloud
+                       ↓
+                 FastEmbed + Groq
 ```
 
-1. **Ingest**: Upload a PDF → Inngest triggers the ingest function → PDF is chunked, embedded, and stored in Qdrant
-2. **Query**: Ask a question → Inngest triggers the query function → question is embedded, top-k chunks retrieved, Groq generates the answer
+1. **Ingest**: Upload a PDF → Streamlit posts it to the FastAPI `/ingest` endpoint → PDF is chunked, embedded, and stored in Qdrant
+2. **Query**: Ask a question → Streamlit posts it to `/query` → question is embedded, top-k chunks retrieved from Qdrant, Groq generates the answer
+
+The backend also registers equivalent Inngest functions (`rag/ingest_pdf`, `rag/query_pdf_ai`) at `/api/inngest` for event-driven, durable execution with retries, throttling (2 ingests per minute), and per-source rate limiting (1 per 4 hours). The Streamlit UI currently calls the HTTP endpoints directly.
 
 ## Features
 
-- Throttled PDF ingestion (2 per minute, 1 per source per 4 hours)
-- Durable multi-step Inngest functions with automatic retries
+- PDF chunking with sentence-aware splitting (1000 chars, 200 overlap)
+- Local ONNX embeddings via FastEmbed — no embedding API costs
 - Module-level Qdrant connection singleton for efficient reuse
 - Deduplication of chunk IDs using UUID5
+- Optional Inngest workflow path with automatic retries, throttling, and rate limiting
+- Cold-start handling in the UI for Render's free tier
 
 ## Local Development
 
