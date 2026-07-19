@@ -24,4 +24,5 @@ def load_and_chunk_pdf(path: str) -> list[str]:
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    return [emb.tolist() for emb in _embedder.embed(texts)]
+    # Small batches keep peak memory under Render's 512 MB free-tier limit
+    return [emb.tolist() for emb in _embedder.embed(texts, batch_size=8)]

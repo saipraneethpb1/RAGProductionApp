@@ -51,12 +51,30 @@ def query_rag(question: str, top_k: int) -> dict:
 st.title("Upload a PDF to Ingest")
 uploaded = st.file_uploader("Choose a PDF", type=["pdf"], accept_multiple_files=False)
 
+def _show_http_error(action: str, err: requests.exceptions.HTTPError):
+    resp = err.response
+    if resp is not None:
+        detail = resp.text[:500]
+        st.error(f"{action} failed (HTTP {resp.status_code}): {detail}")
+        if resp.status_code in (502, 503):
+            st.warning(
+                "The backend likely ran out of memory or restarted mid-request "
+                "(free-tier limits). Try a smaller PDF, or wait a minute and retry."
+            )
+    else:
+        st.error(f"{action} failed: {err}")
+
+
 if uploaded is not None:
     st.info("⏳ First request may take up to 60s while the backend wakes up on Render's free tier.")
     with st.spinner("Waking up backend..."):
         _wake_backend()
     with st.spinner("Ingesting PDF — chunking, embedding, storing..."):
-        result = ingest_pdf(uploaded.getvalue(), uploaded.name)
+        try:
+            result = ingest_pdf(uploaded.getvalue(), uploaded.name)
+        except requests.exceptions.HTTPError as e:
+            _show_http_error("Ingestion", e)
+            st.stop()
     st.success(f"Ingested {result['ingested']} chunks from: {result['source']}")
     st.caption("You can upload another PDF if you like.")
 
@@ -71,7 +89,11 @@ with st.form("rag_query_form"):
     if submitted and question.strip():
         with st.spinner("Waking up backend if needed..."):
             _wake_backend()
-            output = query_rag(question.strip(), int(top_k))
+            try:
+                output = query_rag(question.strip(), int(top_k))
+            except requests.exceptions.HTTPError as e:
+                _show_http_error("Query", e)
+                st.stop()
             answer = output.get("answer", "")
             sources = output.get("sources", [])
 
