@@ -1,0 +1,31 @@
+name: Keep services awake
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render backend
+        run: |
+          code=$(curl -s -o /dev/null -m 90 -w "%{http_code}" https://ragproductionapp-nklx.onrender.com/health || true)
+          echo "backend health: $code"
+
+      - name: Ping Streamlit frontend
+        run: |
+          code=$(curl -s -o /dev/null -m 60 -L -w "%{http_code}" https://ragappuctionapp-axmgpfaxbgwaxbqbkhfpot.streamlit.app/ || true)
+          echo "frontend: $code"
+
+      # Keeps the free Qdrant cluster from being suspended for inactivity.
+      # Requires the QDRANT_API_KEY repository secret; skipped if unset.
+      - name: Ping Qdrant cluster
+        if: ${{ vars.QDRANT_URL != '' }}
+        env:
+          QDRANT_URL: ${{ vars.QDRANT_URL }}
+          QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
+        run: |
+          code=$(curl -s -o /dev/null -m 30 -w "%{http_code}" "$QDRANT_URL/collections" -H "api-key: $QDRANT_API_KEY" || true)
+          echo "qdrant: $code"
