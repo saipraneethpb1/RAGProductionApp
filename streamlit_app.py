@@ -32,7 +32,7 @@ def ingest_pdf(file_bytes: bytes, filename: str) -> dict:
     resp = requests.post(
         f"{_backend_url()}/ingest",
         files={"file": (filename, file_bytes, "application/pdf")},
-        timeout=180,
+        timeout=900,
     )
     resp.raise_for_status()
     return resp.json()
@@ -69,6 +69,7 @@ if uploaded is not None:
     st.info("⏳ First request may take up to 60s while the backend wakes up on Render's free tier.")
     with st.spinner("Waking up backend..."):
         _wake_backend()
+    st.caption("Embedding runs on free-tier hardware — expect roughly 10–20 seconds per page for larger PDFs.")
     with st.spinner("Ingesting PDF — chunking, embedding, storing..."):
         try:
             result = ingest_pdf(uploaded.getvalue(), uploaded.name)
